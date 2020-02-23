@@ -128,8 +128,8 @@ namespace msbuild.crypto
     /// You can use this task to create a secret file through an msbuild project,
     /// or you can call directly using powershell:
     /// 
-    /// PS > Add-Type -Path msbuild.git.dll
-    /// PS > [msbuild.dpapi.DPAPIWriteSecret]::WriteSecretFile("P@ssw0rd", "c:\users\myself\password.secret", $true, $null, $null)
+    /// PS > Add-Type -Path msbuild.crypto.dll
+    /// PS > [msbuild.crypto.DPAPIWriteSecret]::WriteSecretFile("P@ssw0rd", "c:\users\myself\password.secret", $true, $null, $null)
     /// </summary>
     public class DPAPIWriteSecret : Task
     {
@@ -272,7 +272,7 @@ namespace msbuild.crypto
 
             byte[] customEntropy = null;
             if (hasEntropy) customEntropy = Encoding.UTF8.GetBytes(entropyStr);
-            else customEntropy = File.ReadAllBytes(entropyFile);
+            else if(hasEntropyFile) customEntropy = File.ReadAllBytes(entropyFile);
 
             if (customEntropy == null)
                 customEntropy = entropy;
