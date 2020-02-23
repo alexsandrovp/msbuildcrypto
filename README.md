@@ -108,4 +108,4 @@ PS> Add-Type -Path msbuild.crypto.dll
 PS> [msbuild.crypto.DPAPIWriteSecret]::WriteSecretFile($secretText, $pathToSecretFile, $useMachineScope, $optionalEntropyText, $optionalEntropyFile)
 ```
 
-where you either use __$optionalEntropyText__ or __$optionalEntropyFile__, settings the other to $null
+where you either use __$optionalEntropyText__ or __$optionalEntropyFile__, setting the other to $null
