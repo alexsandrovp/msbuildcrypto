@@ -72,12 +72,22 @@ namespace msbuild.crypto
         /// <summary>
         /// Search for certificates in this store location
         /// </summary>
-        public StoreLocation StoreLocation { get; set; } = StoreLocation.CurrentUser;
+        public string StoreLocation
+        {
+            get { return storeLocation.ToString(); }
+            set { storeLocation = (StoreLocation)Enum.Parse(typeof(StoreLocation), value, true); }
+        }
+        private StoreLocation storeLocation = System.Security.Cryptography.X509Certificates.StoreLocation.CurrentUser;
 
         /// <summary>
         /// Search for certificates in this store
         /// </summary>
-        public StoreName StoreName { get; set; } = StoreName.My;
+        public string StoreName
+        {
+            get { return storeName.ToString(); }
+            set { storeName = (StoreName)Enum.Parse(typeof(StoreName), value, true); }
+        }
+        private StoreName storeName = System.Security.Cryptography.X509Certificates.StoreName.My;
 
         /// <summary>
         /// Search certificates matching this thumbprint
@@ -109,7 +119,7 @@ namespace msbuild.crypto
                 return false;
             }
 
-            certificate = AsymHelper.SelectCertificate(false, StoreLocation, StoreName, Thumbprint, Subject, FriendlyName, Issuer);
+            certificate = AsymHelper.SelectCertificate(false, storeLocation, storeName, Thumbprint, Subject, FriendlyName, Issuer);
             if (certificate == null)
             {
                 Log.LogError("could not find a certificate that has a usable private key and matches the given data");
@@ -181,12 +191,22 @@ namespace msbuild.crypto
         /// <summary>
         /// Search for certificates in this store location
         /// </summary>
-        public StoreLocation StoreLocation { get; set; } = StoreLocation.CurrentUser;
+        public string StoreLocation
+        {
+            get { return storeLocation.ToString(); }
+            set { storeLocation = (StoreLocation)Enum.Parse(typeof(StoreLocation), value, true); }
+        }
+        private StoreLocation storeLocation = System.Security.Cryptography.X509Certificates.StoreLocation.CurrentUser;
 
         /// <summary>
         /// Search for certificates in this store
         /// </summary>
-        public StoreName StoreName { get; set; } = StoreName.My;
+        public string StoreName
+        {
+            get { return storeName.ToString(); }
+            set { storeName = (StoreName)Enum.Parse(typeof(StoreName), value, true); }
+        }
+        private StoreName storeName = System.Security.Cryptography.X509Certificates.StoreName.My;
 
         /// <summary>
         /// Search certificates matching this thumbprint
@@ -230,7 +250,7 @@ namespace msbuild.crypto
                 return false;
             }
 
-            certificate = AsymHelper.SelectCertificate(true, StoreLocation, StoreName, Thumbprint, Subject, FriendlyName, Issuer);
+            certificate = AsymHelper.SelectCertificate(true, storeLocation, storeName, Thumbprint, Subject, FriendlyName, Issuer);
             if (certificate == null)
             {
                 Log.LogError("could not find a certificate that has a usable private key and matches the given data");
