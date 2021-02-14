@@ -1,0 +1,45 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Test" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+
+	<UsingTask AssemblyFile="bin/debug/msbuild.crypto.dll" TaskName="msbuild.crypto.DPAPIEncrypt" />
+	<UsingTask AssemblyFile="bin/debug/msbuild.crypto.dll" TaskName="msbuild.crypto.DPAPIDecrypt" />
+	<UsingTask AssemblyFile="bin/debug/msbuild.crypto.dll" TaskName="msbuild.crypto.AesEncrypt" />
+	<UsingTask AssemblyFile="bin/debug/msbuild.crypto.dll" TaskName="msbuild.crypto.AesDecrypt" />
+	<UsingTask AssemblyFile="bin/debug/msbuild.crypto.dll" TaskName="msbuild.crypto.CertEncrypt" />
+	<UsingTask AssemblyFile="bin/debug/msbuild.crypto.dll" TaskName="msbuild.crypto.CertDecrypt" />
+	
+	<Target Name="Test">
+
+		<DPAPIEncrypt ToEncrypt="hello DPAPI world" OutputFile="secret.bin" Overwrite="true" Entropy="abc123" EncryptionScope="LocalMachine" />
+
+		<DPAPIDecrypt InputFile="secret.bin" Entropy="abc123" >
+			<Output TaskParameter="Decrypted" PropertyName="MyProperty" />
+		</DPAPIDecrypt>
+
+		<Message Text="My secret is: $(MyProperty)" />
+
+
+
+
+		<AesEncrypt ToEncrypt="hello AES world" OutputFile="secret.bin" Overwrite="true" Entropy="abc123" Password="abd123" />
+
+		<AesDecrypt InputFile="secret.bin" Entropy="abc123" Password="abd123" >
+			<Output TaskParameter="Decrypted" PropertyName="MyProperty" />
+		</AesDecrypt>
+
+		<Message Text="My secret is: $(MyProperty)" />
+
+
+
+
+		<CertEncrypt ToEncrypt="hello certificate world" OutputFile="secret.bin" Overwrite="true" Subject="localhost" />
+
+		<CertDecrypt InputFile="secret.bin" Subject="localhost" >
+			<Output TaskParameter="Decrypted" PropertyName="MyProperty" />
+		</CertDecrypt>
+
+		<Message Text="My secret is: $(MyProperty)" />
+		
+	</Target>
+
+</Project>

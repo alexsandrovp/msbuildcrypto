@@ -6,6 +6,7 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.IO;
+using System.Diagnostics;
 
 namespace msbuild.crypto
 {
@@ -13,23 +14,23 @@ namespace msbuild.crypto
     /// Utility task to read a secret from a file stored on your build server
     /// Useful for getting passwords to servers/services
     /// </summary>
-    public class DPAPIGetSecret : Task
+    public class DPAPIDecrypt : Task
     {
         /// <summary>
         /// File storing the secret
         /// </summary>
         [Required]
-        public string SecretFile { get; set; } = null;
-
-        /// <summary>
-        /// true if we should decrypt the contents of SecretFile
-        /// </summary>
-        public bool Encrypted { get; set; } = false;
+        public string InputFile { get; set; } = null;
 
         /// <summary>
         /// either "user" or "machine"
         /// </summary>
-        public string EncryptionScope { get; set; } = "user";
+        public string EncryptionScope
+        {
+            get { return encryptionScope.ToString(); }
+            set { encryptionScope = (DataProtectionScope)Enum.Parse(typeof(DataProtectionScope), value, true); }
+        }
+        private DataProtectionScope encryptionScope = DataProtectionScope.CurrentUser;
 
         /// <summary>
         /// optional entropy (utf8 bytes)
@@ -45,7 +46,7 @@ namespace msbuild.crypto
         /// task output (decrypted secret)
         /// </summary>
         [Output]
-        public string Secret { get; set; }
+        public string Decrypted { get; set; }
 
         public override bool Execute()
         {
@@ -53,17 +54,12 @@ namespace msbuild.crypto
             {
                 if (!validate()) return false;
 
-                byte[] bytes = File.ReadAllBytes(SecretFile);
+                byte[] bytes = File.ReadAllBytes(InputFile);
 
-                if (Encrypted)
-                {
-                    byte[] customEntropy = DPAPIHelper.getCustomEntropy(Entropy, EntropyFile);
-                    DataProtectionScope scope = EncryptionScope == "user"
-                        ? DataProtectionScope.CurrentUser : DataProtectionScope.LocalMachine;
-                    bytes = ProtectedData.Unprotect(bytes, customEntropy, scope);
-                }
+                byte[] customEntropy = DPAPIHelper.getCustomEntropy(Entropy, EntropyFile);
+                bytes = ProtectedData.Unprotect(bytes, customEntropy, encryptionScope);
 
-                Secret = Encoding.UTF8.GetString(bytes);
+                Decrypted = Encoding.UTF8.GetString(bytes);
 
                 return true;
             }
@@ -77,47 +73,32 @@ namespace msbuild.crypto
 
         private bool validate()
         {
-            if (string.IsNullOrWhiteSpace(SecretFile))
+            if (string.IsNullOrWhiteSpace(InputFile))
             {
                 Log.LogError("SecretFile is required");
                 return false;
             }
 
-            if (!File.Exists(SecretFile))
+            if (!File.Exists(InputFile))
             {
-                Log.LogError("SecretFile does not exist: {0}", SecretFile);
+                Log.LogError("SecretFile does not exist: {0}", InputFile);
                 return false;
             }
 
-            if (Encrypted)
+            bool hasEntropy = !string.IsNullOrWhiteSpace(Entropy);
+            bool hasEntropyFile = !string.IsNullOrWhiteSpace(EntropyFile);
+
+            if (hasEntropy && hasEntropyFile)
             {
-                if (string.IsNullOrWhiteSpace(EncryptionScope))
-                {
-                    Log.LogError("empty EncryptionScope");
-                    return false;
-                }
-                EncryptionScope = EncryptionScope.ToLower();
-                if (EncryptionScope != "user" && EncryptionScope != "machine")
-                {
-                    Log.LogError("EncryptionScope must be 'user' or 'machine'");
-                    return false;
-                }
+                Log.LogWarning("Ignoring EntropyFile because Entropy was used");
+                EntropyFile = null;
+                hasEntropyFile = false;
+            }
 
-                bool hasEntropy = !string.IsNullOrWhiteSpace(Entropy);
-                bool hasEntropyFile = !string.IsNullOrWhiteSpace(EntropyFile);
-
-                if (hasEntropy && hasEntropyFile)
-                {
-                    Log.LogWarning("Ignoring EntropyFile because Entropy was used");
-                    EntropyFile = null;
-                    hasEntropyFile = false;
-                }
-
-                if (hasEntropyFile && !File.Exists(EntropyFile))
-                {
-                    Log.LogError("EntropyFile does not exist: {0}", EntropyFile);
-                    return false;
-                }
+            if (hasEntropyFile && !File.Exists(EntropyFile))
+            {
+                Log.LogError("EntropyFile does not exist: {0}", EntropyFile);
+                return false;
             }
 
             return true;
@@ -131,24 +112,31 @@ namespace msbuild.crypto
     /// PS > Add-Type -Path msbuild.crypto.dll
     /// PS > [msbuild.crypto.DPAPIWriteSecret]::WriteSecretFile("P@ssw0rd", "c:\users\myself\password.secret", $true, $null, $null)
     /// </summary>
-    public class DPAPIWriteSecret : Task
+    public class DPAPIEncrypt : Task
     {
         /// <summary>
         /// secret to store
         /// </summary>
         [Required]
-        public string Secret { get; set; } = null;
+        public string ToEncrypt { get; set; } = null;
 
         /// <summary>
         /// File storing the secret
         /// </summary>
         [Required]
-        public string SecretFile { get; set; } = null;
+        public string OutputFile { get; set; } = null;
+
+        public bool Overwrite { get; set; } = false;
 
         /// <summary>
         /// either "user" or "machine"
         /// </summary>
-        public string EncryptionScope { get; set; } = "user";
+        public string EncryptionScope
+        {
+            get { return encryptionScope.ToString(); }
+            set { encryptionScope = (DataProtectionScope)Enum.Parse(typeof(DataProtectionScope), value, true); }
+        }
+        private DataProtectionScope encryptionScope = DataProtectionScope.CurrentUser;
 
         /// <summary>
         /// optional entropy (utf8 bytes)
@@ -162,23 +150,28 @@ namespace msbuild.crypto
 
         public override bool Execute()
         {
+#if DEBUG
+            if (!Debugger.IsAttached)
+            {
+                var pid = Process.GetCurrentProcess().Id;
+                Log.LogWarning("attach debugger to PID {0}, press any key to continue", pid);
+                Console.ReadKey();
+            }
+#endif
             try
             {
                 if (!validate()) return false;
 
-                FileInfo fi = new FileInfo(SecretFile);
-                if (fi.Exists) throw new Exception("file already exists: " + fi.FullName);
+                FileInfo fi = new FileInfo(OutputFile);
 
-                byte[] bytes = Encoding.UTF8.GetBytes(Secret);
+                byte[] bytes = Encoding.UTF8.GetBytes(ToEncrypt);
                 byte[] customEntropy = DPAPIHelper.getCustomEntropy(Entropy, EntropyFile);
-                DataProtectionScope scope = EncryptionScope == "user"
-                    ? DataProtectionScope.CurrentUser : DataProtectionScope.LocalMachine;
-                bytes = ProtectedData.Protect(bytes, customEntropy, scope);
+                bytes = ProtectedData.Protect(bytes, customEntropy, encryptionScope);
 
                 if (!fi.Directory.Exists)
                     Directory.CreateDirectory(fi.Directory.FullName);
 
-                File.WriteAllBytes(SecretFile, bytes);
+                File.WriteAllBytes(OutputFile, bytes);
                 return true;
             }
             catch (Exception ex)
@@ -189,12 +182,12 @@ namespace msbuild.crypto
             return false;
         }
 
-        public static void WriteSecretFile(string secret, string secretFile,
+        public static void WriteEncryptedFile(string toEncrypt, string outputFile,
             bool machineScope, string entropyStr, string entropyFile)
         {
             try
             {
-                DPAPIHelper.writeSecretFile(secret, secretFile, machineScope, entropyStr, entropyFile);
+                DPAPIHelper.writeSecretFile(toEncrypt, outputFile, machineScope, entropyStr, entropyFile);
             }
             catch (Exception ex)
             {
@@ -204,34 +197,26 @@ namespace msbuild.crypto
 
         private bool validate()
         {
-            if (string.IsNullOrWhiteSpace(Secret))
+            if (string.IsNullOrWhiteSpace(ToEncrypt))
             {
                 Log.LogError("Secret is required");
                 return false;
             }
 
-            if (string.IsNullOrWhiteSpace(SecretFile))
+            if (string.IsNullOrWhiteSpace(OutputFile))
             {
                 Log.LogError("SecretFile is required");
                 return false;
             }
 
-            if (File.Exists(SecretFile))
+            if (File.Exists(OutputFile))
             {
-                Log.LogError("SecretFile already exists: {0}", SecretFile);
-                return false;
-            }
-
-            if (string.IsNullOrWhiteSpace(EncryptionScope))
-            {
-                Log.LogError("empty EncryptionScope");
-                return false;
-            }
-            EncryptionScope = EncryptionScope.ToLower();
-            if (EncryptionScope != "user" && EncryptionScope != "machine")
-            {
-                Log.LogError("EncryptionScope must be 'user' or 'machine'");
-                return false;
+                if (Overwrite) Log.LogWarning("overwriting file: {0}", new FileInfo(OutputFile).FullName);
+                else
+                {
+                    Log.LogError("output file already exists: {0}", new FileInfo(OutputFile).FullName);
+                    return false;
+                }
             }
 
             bool hasEntropy = !string.IsNullOrWhiteSpace(Entropy);
@@ -256,9 +241,6 @@ namespace msbuild.crypto
 
     internal class DPAPIHelper
     {
-        private static readonly byte[] entropy =
-            new byte[] { 142, 105, 138, 16, 69, 248, 7, 103, 211, 145, 248, 120, 61, 244, 150, 12 };
-
         internal static byte[] getCustomEntropy(string entropyStr = null, string entropyFile = null)
         {
             bool hasEntropy = !string.IsNullOrWhiteSpace(entropyStr);
@@ -275,10 +257,10 @@ namespace msbuild.crypto
             else if(hasEntropyFile) customEntropy = File.ReadAllBytes(entropyFile);
 
             if (customEntropy == null)
-                customEntropy = entropy;
+                customEntropy = Resources.entropy;
             else
             {
-                List<byte> tempb = new List<byte>(entropy);
+                List<byte> tempb = new List<byte>(Resources.entropy);
                 tempb.AddRange(customEntropy);
                 customEntropy = tempb.ToArray();
             }
